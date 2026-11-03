@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import { Card, ErrorBlock, Loading, SectionTitle, TableWrap, Td, Th, fmtNum, fmtPct } from "../components/ui";
 import { INDEX_KEYS, loadIndex } from "../lib/data";
-import { normalizePair, streakForwardStats, yearlyStats } from "../lib/stats";
+import { normalizePair, monthlySeasonality, streakForwardStats, yearlyStats } from "../lib/stats";
 import type { IndexData } from "../lib/types";
 
 function ReturnBars({ data }: { data: { year: number; ret: number | null }[] }) {
@@ -63,6 +63,14 @@ export default function History() {
     const closes = idx.points.map((p) => p[1]);
     return [2, 3, 4, 5, 6].map((k) => ({ k, ...streakForwardStats(closes, k, 5) }));
   }, [idx]);
+
+  const monthStats = useMemo(() => (idx ? monthlySeasonality(idx.points) : []), [idx]);
+  const bestMonth = monthStats.length
+    ? monthStats.reduce((a, b) => (b.avg > a.avg ? b : a))
+    : null;
+  const worstMonth = monthStats.length
+    ? monthStats.reduce((a, b) => (b.avg < a.avg ? b : a))
+    : null;
 
   if (err) return <ErrorBlock msg={`数据加载失败：${err}`} />;
 
@@ -193,6 +201,41 @@ export default function History() {
             </TableWrap>
             <p className="mt-3 text-[11px] text-zinc-600">
               样本为 {idx.points[0]?.[0]} 至今全部交易日；短连跌后的反弹只是统计常态，2008 年那种连跌照样接飞刀——仓位比信号重要。
+            </p>
+          </Card>
+
+          <Card className="p-4">
+            <SectionTitle
+              title="月度季节性"
+              sub={`按自然月统计每月收益（月内首→末收盘），每月 ${monthStats[0]?.count ?? 0} 个年度样本——看看「某月必涨」的直觉靠不靠谱`}
+            />
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthStats.map((m) => ({ m: `${m.month}月`, avg: m.avg, wr: m.winRate }))}
+                  margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+                  <CartesianGrid stroke="#27272a" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="m" tick={{ fill: "#71717a", fontSize: 11 }} />
+                  <YAxis tick={{ fill: "#71717a", fontSize: 11 }} unit="%" width={52} />
+                  <Tooltip
+                    contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, fontSize: 12 }}
+                    labelStyle={{ color: "#a1a1aa" }}
+                    formatter={(v: number, name: string) => name === "avg"
+                      ? [`${v.toFixed(2)}%`, "平均月收益"]
+                      : [`${v.toFixed(0)}%`, "上涨月份占比"]}
+                  />
+                  <Bar dataKey="avg" name="平均月收益%">
+                    {monthStats.map((m, i) => (
+                      <Cell key={i} fill={m.avg >= 0 ? "#34d399" : "#f87171"} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
+              最强月份 {bestMonth?.month} 月（平均 {fmtPct(bestMonth?.avg ?? 0, 2)}，胜率 {bestMonth?.winRate.toFixed(0)}%）、
+              最弱月份 {worstMonth?.month} 月（{fmtPct(worstMonth?.avg ?? 0, 2)}）。
+              注意：季节性是所有统计里最脆弱的一种——样本只有几十个、且经常被单次危机主导（如 2008 年 10 月拖垮全年 10 月均值），
+              只当趣味参考，别用它定买卖。
             </p>
           </Card>
         </>

@@ -131,3 +131,39 @@ export function normalizePair(
   }
   return { dates, a: av, b: bv };
 }
+
+export interface MonthStat {
+  month: number;   // 1-12
+  avg: number;     // 平均月收益 %
+  winRate: number; // 上涨月份占比 %
+  count: number;   // 样本月数
+}
+
+/** 月度季节性：每月内首→末收盘收益，按自然月聚合多年样本 */
+export function monthlySeasonality(points: [string, number][]): MonthStat[] {
+  const rets: number[][] = Array.from({ length: 12 }, () => []);
+  let curKey = "";
+  let first = 0;
+  let last = 0;
+  const flush = () => {
+    if (curKey && first > 0) {
+      rets[Number(curKey.slice(5, 7)) - 1].push((last - first) / first * 100);
+    }
+  };
+  for (const [d, v] of points) {
+    const key = d.slice(0, 7);
+    if (key !== curKey) {
+      flush();
+      curKey = key;
+      first = v;
+    }
+    last = v;
+  }
+  flush();
+  return rets.map((r, i) => ({
+    month: i + 1,
+    avg: r.length ? r.reduce((a, b) => a + b, 0) / r.length : 0,
+    winRate: r.length ? r.filter((x) => x > 0).length / r.length * 100 : 0,
+    count: r.length,
+  }));
+}

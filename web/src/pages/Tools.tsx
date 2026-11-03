@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, Loading, SectionTitle, TableWrap, Td, Th, fmtPct } from "../components/ui";
 import { INDEX_KEYS, loadIndex } from "../lib/data";
+import { fetchTencentQuotes } from "../lib/realtime";
 import type { IndexData } from "../lib/types";
 
 // ---------------- A/C 类费率计算器 ----------------
@@ -97,6 +98,91 @@ function ACFeeCalc() {
         计算为近似口径：C 类服务费按初始金额×年化费率×天数/365 线性计提，实际按每日净值计提；不同基金费率档不同，
         以基金合同为准，请按实际费率修改上方参数。
       </p>
+    </Card>
+  );
+}
+
+// ---------------- 小算盘：回本测算 + 汇率换算 ----------------
+function RecoveryAndFx() {
+  const [loss, setLoss] = useState(20);   // 当前亏损 %
+  const [usd, setUsd] = useState(1000);   // 美元金额
+  const [rate, setRate] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      fetchTencentQuotes(["whUSDCNY"])
+        .then((qs) => { if (alive && qs.whUSDCNY) setRate(qs.whUSDCNY.price); })
+        .catch(() => undefined);
+    load();
+    const t = setInterval(load, 30000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
+  // 亏损 x% 后回本需涨：x/(1-x)
+  const need = (x: number) => x / (100 - x) * 100;
+  const rows = [5, 10, 15, 20, 30, 40, 50];
+
+  return (
+    <Card className="p-4">
+      <SectionTitle title="小算盘" sub="两个最常被问到的数字：亏了要涨多少才回本、美元换人民币多少" />
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* 回本测算 */}
+        <div className="rounded-lg border border-zinc-800/70 p-4">
+          <div className="text-sm font-medium text-zinc-200">回本测算</div>
+          <label className="mt-3 flex items-center gap-2 text-xs text-zinc-500">
+            当前亏损
+            <span className="flex items-center rounded-lg border border-zinc-800 bg-zinc-950 px-2 focus-within:border-sky-500/50">
+              <input type="number" value={loss} min={1} max={90}
+                onChange={(e) => setLoss(Math.min(99, Math.max(1, Number(e.target.value) || 1)))}
+                className="num w-16 bg-transparent py-1 text-sm text-zinc-200 outline-none" />
+              <span className="text-zinc-600">%</span>
+            </span>
+            <span className="ml-auto text-zinc-400">
+              回本需涨 <b className="num text-lg text-amber-400">{fmtPct(need(loss), 1)}</b>
+            </span>
+          </label>
+          <div className="mt-3 grid grid-cols-4 gap-1.5 sm:grid-cols-7">
+            {rows.map((x) => (
+              <button key={x}
+                className={`num rounded-md border px-1 py-1 text-[11px] ${loss === x ? "border-amber-500/50 bg-amber-500/15 text-amber-300" : "border-zinc-800 text-zinc-500 hover:border-zinc-700"}`}
+                onClick={() => setLoss(x)}>
+                -{x}%<br />→{need(x).toFixed(1)}%
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
+            亏损越深，回本所需涨幅呈非线性放大——-50% 要 +100% 才回本。这就是为什么控制回撤比抓收益更重要。
+          </p>
+        </div>
+
+        {/* 汇率换算 */}
+        <div className="rounded-lg border border-zinc-800/70 p-4">
+          <div className="flex items-baseline justify-between">
+            <div className="text-sm font-medium text-zinc-200">美元 ⇄ 人民币</div>
+            <div className="num text-xs text-zinc-500">
+              USDCNY <b className="text-zinc-200">{rate == null ? "…" : rate.toFixed(4)}</b>
+              <span className="ml-1 text-zinc-600">实时</span>
+            </div>
+          </div>
+          <label className="mt-3 flex items-center gap-2 text-xs text-zinc-500">
+            美元
+            <span className="flex items-center rounded-lg border border-zinc-800 bg-zinc-950 px-2 focus-within:border-sky-500/50">
+              <input type="number" value={usd} step={100}
+                onChange={(e) => setUsd(Number(e.target.value) || 0)}
+                className="num w-24 bg-transparent py-1 text-sm text-zinc-200 outline-none" />
+              <span className="text-zinc-600">$</span>
+            </span>
+          </label>
+          <div className="mt-2 num text-2xl font-bold text-zinc-100">
+            ¥ {(rate == null ? 0 : usd * rate).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
+            汇率影响 QDII 净值：人民币贬值时期 QDII 有隐性汇率收益，反之亦然。
+            场内溢价不含汇率预期修正，仅供换汇参考，实际以银行/渠道牌价为准。
+          </p>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -262,6 +348,7 @@ export default function Tools() {
   return (
     <div className="space-y-6">
       <ACFeeCalc />
+      <RecoveryAndFx />
       <DcaDateTest />
     </div>
   );
