@@ -36,6 +36,19 @@ CREATE TABLE IF NOT EXISTS pe_history (
     date TEXT PRIMARY KEY,
     pe   REAL
 );
+CREATE TABLE IF NOT EXISTS fund_limits (
+    code          TEXT NOT NULL,
+    date          TEXT NOT NULL,
+    status_buy    TEXT,
+    status_redeem TEXT,
+    daily_limit   REAL,
+    min_buy       REAL,
+    subscribe_rate REAL,
+    dj_status     TEXT,
+    can_buy       INTEGER,
+    raw           TEXT,
+    PRIMARY KEY (code, date)
+);
 CREATE TABLE IF NOT EXISTS kv_cache (
     key        TEXT PRIMARY KEY,
     value      TEXT,
@@ -145,6 +158,40 @@ def load_pe(conn: sqlite3.Connection) -> pd.DataFrame:
     if not df.empty:
         df["date"] = pd.to_datetime(df["date"])
     return df
+
+
+# ---------- 场外限额快照 ----------
+def upsert_fund_limits(conn: sqlite3.Connection, code: str, date: str,
+                       info: dict) -> None:
+    """保存某日限额快照（info: status_buy/status_redeem/daily_limit/min_buy/
+    subscribe_rate/dj_status/can_buy）"""
+    conn.execute(
+        "INSERT OR REPLACE INTO fund_limits"
+        " (code, date, status_buy, status_redeem, daily_limit, min_buy,"
+        "  subscribe_rate, dj_status, can_buy, raw) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (code, date,
+         info.get("status_buy"), info.get("status_redeem"),
+         info.get("daily_limit"), info.get("min_buy"), info.get("subscribe_rate"),
+         info.get("dj_status"),
+         None if info.get("can_buy") is None else int(bool(info.get("can_buy"))),
+         json.dumps(info, ensure_ascii=False, default=str)))
+    conn.commit()
+
+
+def load_fund_limits(conn: sqlite3.Connection, code: str) -> list[dict]:
+    """某基金全部历史限额快照（按日期升序），用于 diff 出限额风向事件"""
+    rows = conn.execute(
+        "SELECT date, status_buy, status_redeem, daily_limit, min_buy,"
+        " subscribe_rate, dj_status, can_buy FROM fund_limits"
+        " WHERE code=? ORDER BY date", (code,)).fetchall()
+    keys = ("date", "status_buy", "status_redeem", "daily_limit", "min_buy",
+            "subscribe_rate", "dj_status", "can_buy")
+    return [dict(zip(keys, r)) for r in rows]
+
+
+def load_latest_fund_limits(conn: sqlite3.Connection, code: str) -> dict | None:
+    rows = load_fund_limits(conn, code)
+    return rows[-1] if rows else None
 
 
 # ---------- KV 缓存 ----------

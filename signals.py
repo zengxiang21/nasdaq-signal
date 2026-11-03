@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from config import BUY_THRESHOLD, WATCH_THRESHOLD, WEIGHTS
+from config import BUY_THRESHOLD, PREMIUM_VETO, WATCH_THRESHOLD, WEIGHTS
 
 
 def _lerp(x: float, x0: float, y0: float, x1: float, y1: float) -> float:
@@ -91,7 +91,11 @@ _DIM_FUNCS = {
 }
 
 
-def rating_of(score: float | None) -> str:
+def rating_of(score: float | None, premium: float | None = None) -> str:
+    """评级。溢价一票否决：场内溢价 >= PREMIUM_VETO 时无论评分多少都是高危，
+    因为高溢价买入当天先亏掉溢价，且溢价大概率回落。"""
+    if premium is not None and not pd.isna(premium) and premium >= PREMIUM_VETO:
+        return "🚫 溢价高危"
     if score is None or pd.isna(score):
         return "⚪ 数据不足"
     if score >= BUY_THRESHOLD:

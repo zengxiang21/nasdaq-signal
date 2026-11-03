@@ -98,7 +98,7 @@ def _make_snapshot(fund, scored: pd.DataFrame, quote: dict | None) -> dict:
         "pe_pct": f(row["pe_pct"], 1), "macd_bonus": bonus,
         "dims": dims, "quote": quote,
     }
-    return {"score": score, "rating": rating_of(score), "details": details}
+    return {"score": score, "rating": rating_of(score, premium_used), "details": details}
 
 
 def analyze_fund(conn, fund, pe_df: pd.DataFrame | None = None) -> dict | None:

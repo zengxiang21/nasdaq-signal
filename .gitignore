@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 *.log
 data/
+web/node_modules/
+web/dist/

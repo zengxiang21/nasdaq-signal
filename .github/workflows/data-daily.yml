@@ -1,0 +1,52 @@
+name: data-daily
+
+# 每晚抓一轮数据 → 生成 web/public/data/*.json → 提交回仓库
+# Pages 工作流在 push 后自动重建站点；抓取失败时仓库里总有上一天的数据兜底
+on:
+  schedule:
+    # QDII 净值一般 20:00-23:00（北京时间）披露，跑两次保险
+    - cron: "0 12 * * *"   # 北京 20:00
+    - cron: "0 13 * * *"   # 北京 21:00
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-daily
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: 更新数据并导出 JSON
+        run: python scripts/export_web_data.py --update
+        env:
+          TZ: Asia/Shanghai
+
+      - name: 推送提醒（可选，需配置 Secrets）
+        env:
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BARK_URL: ${{ secrets.BARK_URL }}
+        run: python -c "from notify import send_alerts; send_alerts()"
+
+      - name: 提交数据
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/public/data
+          git diff --staged --quiet || git commit -m "data: daily update $(TZ=Asia/Shanghai date +%F\ %H:%M)"
+          git push
