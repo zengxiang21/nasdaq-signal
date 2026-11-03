@@ -45,6 +45,17 @@ run.bat        # 更新数据 + 构建前端 + 本机服务 http://localhost:851
 
 只想重建站点不更新数据：`python scripts/export_web_data.py` 后 `cd web && npm run dev`。
 
+### 手机 / 内网访问（Tailscale）
+
+本机已注册两个计划任务（隐藏窗口，无需手动干预）：
+
+| 任务 | 触发 | 作用 |
+|---|---|---|
+| `nasdaq-signal-web` | 登录时自启 | `serve-local.bat` 常驻静态服务 :8511 |
+| `nasdaq-signal-update` | 每天 21:20 | `update-local.bat` 抓数 + 重建，本机站与 Pages 同步新鲜 |
+
+同一 Tailscale 网络下的手机/平板直接打开 **http://100.111.139.1:8511/** 即可（防火墙已放行 8511）。改端口/路径后重建任务：`schtasks /delete /tn nasdaq-signal-web` 后重跑上文两条 `schtasks /create`。
+
 ## GitHub 部署（全自动）
 
 1. 推送本仓库到 GitHub（main 分支）
